@@ -37,7 +37,7 @@
   }
   input[type=file]{display:none}
   .search{margin-left:auto;display:flex;gap:8px;align-items:center}
-  .search input{padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);min-width:160px}
+  .search input{padding:2px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);min-width:16px}
   /* viewer fills rest of viewport */
   .viewer-wrap{
     height:calc(100vh - var(--toolbar-h));
@@ -107,8 +107,6 @@
     </div>
 
     <div class="search" role="search" aria-label="Search in document">
-      <input id="searchInput" placeholder="Search (Ctrl+F for browser highlight)" />
-      <button id="findBtn" class="btn ghost">Find</button>
     </div>
   </div>
 
