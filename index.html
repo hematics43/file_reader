@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Word & Excel Reader (Responsive)</title>
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --card: #ffffff;
+    --muted: #555;
+    --accent: #2563eb;
+  }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    margin: 0;
+    background: var(--bg);
+    color: #111;
+    padding: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+    color: var(--accent);
+  }
+  .lead {
+    margin: 4px 0 12px;
+    color: var(--muted);
+    font-size: clamp(0.9rem, 2vw, 1rem);
+  }
+
+  .wrap {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+  }
+
+  .panel {
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    padding: 16px;
+    flex: 1 1 350px;
+    min-width: 300px;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  button:hover {
+    opacity: 0.9;
+  }
+
+  .drop {
+    border: 2px dashed rgba(34, 100, 200, 0.15);
+    padding: 18px;
+    text-align: center;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--muted);
+    transition: 0.2s;
+  }
+  .drop:hover {
+    border-color: var(--accent);
+    background: #f0f6ff;
+  }
+
+  input[type="file"] {
+    display: none;
+  }
+
+  #output {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    min-height: 60vh;
+    overflow-x: auto;
+    overflow-y: auto;
+    padding: 14px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    table-layout: auto;
+  }
+  table th,
+  table td {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 6px;
+    font-size: clamp(0.8rem, 1.5vw, 0.95rem);
+    text-align: left;
+  }
+  table th {
+    background: #f3f6fb;
+  }
+
+  .searchbar {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+  }
+  .searchbar input {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    font-size: 0.9rem;
+  }
+
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  @media (max-width: 768px) {
+    body {
+      padding: 12px;
+    }
+    .wrap {
+      flex-direction: column;
+    }
+    .panel {
+      width: 100%;
+    }
+    #output {
+      min-height: 50vh;
+    }
+    .toolbar {
+      justify-content: center;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="toolbar">
+        <button id="clearBtn">Clear</button>
+        <button id="exportTextBtn">Export Text</button>
+        <button id="exportJsonBtn">Export JSON</button>
+      </div>
+      <h1>Word & Excel Reader</h1>
+      <p class="lead">Open local <strong>.docx</strong> or <strong>.xlsx</strong> files — works fully offline.</p>
+
+      <label class="drop" id="dropZone">
+        Drag & drop file here<br />
+        or <button id="pickBtn" style="margin-top:8px;">Choose File</button>
+        <input id="fileInput" type="file" accept=".docx, .xlsx, .xls, .csv" />
+      </label>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <div id="fileInfo"><em>No file loaded</em></div>
+        <div class="searchbar">
+          <input id="searchInput" placeholder="Search..." />
+          <button id="findBtn">Find</button>
+        </div>
+      </div>
+
+      <div id="output">
+        <p><em>Drop a Word or Excel file to start...</em></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+
+  <script>
+  (function(){
+    const fileInput = document.getElementById('fileInput');
+    const pickBtn = document.getElementById('pickBtn');
+    const dropZone = document.getElementById('dropZone');
+    const fileInfo = document.getElementById('fileInfo');
+    const output = document.getElementById('output');
+    const clearBtn = document.getElementById('clearBtn');
+    const exportTextBtn = document.getElementById('exportTextBtn');
+    const exportJsonBtn = document.getElementById('exportJsonBtn');
+    const searchInput = document.getElementById('searchInput');
+    const findBtn = document.getElementById('findBtn');
+    let current = {type:null, filename:null, text:null, sheets:null, html:null};
+
+    function reset(){
+      current = {type:null, filename:null, text:null, sheets:null, html:null};
+      output.innerHTML = '<p><em>Drop a Word or Excel file to start...</em></p>';
+      fileInfo.innerHTML = '<em>No file loaded</em>';
+    }
+
+    async function handleFile(file){
+      reset();
+      fileInfo.textContent = "Loading " + file.name + "...";
+      const ext = file.name.split('.').pop().toLowerCase();
+      const buf = await file.arrayBuffer();
+
+      if(ext === "docx"){
+        current.type = "docx";
+        current.filename = file.name;
+        const res = await mammoth.convertToHtml({arrayBuffer: buf});
+        current.html = res.value;
+        const textRes = await mammoth.extractRawText({arrayBuffer: buf});
+        current.text = textRes.value;
+        output.innerHTML = "<div>"+current.html+"</div>";
+        fileInfo.textContent = file.name + " (Word)";
+      } else if(["xlsx","xls","csv"].includes(ext)){
+        current.type = "excel";
+        current.filename = file.name;
+        const wb = XLSX.read(new Uint8Array(buf), {type:"array"});
+        const sheets = wb.SheetNames.map(name=>{
+          return {name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1})};
+        });
+        current.sheets = sheets;
+        current.text = sheets.map(s=>"Sheet: "+s.name+"\n"+s.rows.map(r=>r.join('\t')).join('\n')).join('\n\n');
+        renderExcelSheet(0);
+        fileInfo.textContent = file.name + " (Excel)";
+      } else {
+        fileInfo.textContent = "Unsupported file type.";
+      }
+    }
+
+    function renderExcelSheet(i){
+      const s = current.sheets[i];
+      let html = `<h3>${s.name}</h3><div style="overflow-x:auto"><table>`;
+      s.rows.forEach((r, idx)=>{
+        html += "<tr>";
+        r.forEach(c=>{
+          html += idx===0 ? `<th>${c||""}</th>` : `<td>${c||""}</td>`;
+        });
+        html += "</tr>";
+      });
+      html += "</table></div>";
+      output.innerHTML = html;
+    }
+
+    // Events
+    fileInput.addEventListener("change", e=>{
+      if(e.target.files[0]) handleFile(e.target.files[0]);
+      e.target.value="";
+    });
+    pickBtn.addEventListener("click", ()=> fileInput.click());
+
+    ["dragenter","dragover"].forEach(ev=>dropZone.addEventListener(ev,e=>{
+      e.preventDefault(); dropZone.style.borderColor="#2563eb";
+    }));
+    ["dragleave","drop"].forEach(ev=>dropZone.addEventListener(ev,e=>{
+      e.preventDefault(); dropZone.style.borderColor="rgba(34,100,200,0.15)";
+    }));
+    dropZone.addEventListener("drop", e=>{
+      const f=e.dataTransfer.files[0];
+      if(f) handleFile(f);
+    });
+
+    clearBtn.addEventListener("click", reset);
+
+    exportTextBtn.addEventListener("click", ()=>{
+      if(!current.text) return alert("No text to export");
+      const blob = new Blob([current.text], {type:"text/plain"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (current.filename || "file") + "-text.txt";
+      a.click();
+    });
+
+    exportJsonBtn.addEventListener("click", ()=>{
+      if(!current.type) return alert("Nothing to export");
+      const blob = new Blob([JSON.stringify(current, null, 2)], {type:"application/json"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (current.filename || "file") + "-data.json";
+      a.click();
+    });
+
+    findBtn.addEventListener("click", ()=>{
+      const q = searchInput.value.trim().toLowerCase();
+      if(!q) return alert("Enter text to search");
+      const t = output.innerText.toLowerCase();
+      if(t.includes(q)) alert("Text found — use browser search (Ctrl+F) to highlight.");
+      else alert("Not found.");
+    });
+
+    reset();
+  })();
+  </script>
+</body>
+</html>
