@@ -2,343 +2,427 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Word, Excel & PDF Reader (Responsive)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Full-View File Viewer — Word / Excel / PDF</title>
 <style>
-  :root {
-    --bg: #f6f8fb;
-    --card: #ffffff;
-    --muted: #555;
+  :root{
     --accent: #2563eb;
+    --bg: #f6f8fb;
+    --card: #fff;
+    --muted: #556;
+    --toolbar-h: 64px;
   }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-    margin: 0;
-    background: var(--bg);
-    color: #111;
-    padding: 16px;
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:#111}
+  /* Top sticky toolbar */
+  .topbar{
+    position:fixed;
+    top:0;left:0;right:0;
+    height:var(--toolbar-h);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 16px;
+    background:linear-gradient(0deg,rgba(255,255,255,0.95),rgba(255,255,255,0.9));
+    border-bottom:1px solid rgba(0,0,0,0.06);
+    z-index:40;
+    box-shadow:0 2px 8px rgba(2,6,23,0.04);
+    flex-wrap:wrap;
   }
-  h1 {
-    margin: 0;
-    font-size: clamp(1.2rem, 2.5vw, 1.6rem);
-    color: var(--accent);
+  .brand{font-weight:700;color:var(--accent);margin-right:6px}
+  .toolbar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:14px}
+  .ghost{background:transparent;color:var(--muted);border:1px solid rgba(0,0,0,0.06)}
+  .drop-label{
+    display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;border:2px dashed rgba(34,100,200,0.12);cursor:pointer;background:#fff;font-size:14px;color:var(--muted)
   }
-  .lead {
-    margin: 4px 0 12px;
-    color: var(--muted);
-    font-size: clamp(0.9rem, 2vw, 1rem);
+  input[type=file]{display:none}
+  .search{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .search input{padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);min-width:160px}
+  /* viewer fills rest of viewport */
+  .viewer-wrap{
+    height:calc(100vh - var(--toolbar-h));
+    padding-top:8px;
+    box-sizing:border-box;
+    margin-top:var(--toolbar-h);
+    display:flex;
+    gap:12px;
+    align-items:stretch;
   }
-
-  .wrap {
-    display: flex;
-    flex-direction: row;
-    gap: 16px;
-    max-width: 1200px;
-    margin: 0 auto;
-    flex-wrap: wrap;
-  }
-
-  .panel {
-    background: var(--card);
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-    padding: 16px;
-    flex: 1 1 350px;
-    min-width: 300px;
-  }
-
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  button {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
-  }
-  button:hover {
-    opacity: 0.9;
+  .viewer {
+    flex:1 1 auto;
+    background:var(--card);
+    margin:12px;
+    border-radius:10px;
+    overflow:auto;
+    border:1px solid rgba(0,0,0,0.04);
+    padding:14px;
+    box-shadow:0 6px 20px rgba(2,6,23,0.03);
+    position:relative;
   }
 
-  .drop {
-    border: 2px dashed rgba(34, 100, 200, 0.15);
-    border-radius: 8px;
-    padding: 8px 14px;
-    cursor: pointer;
-    color: var(--muted);
-    transition: 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  /* content containers inside viewer */
+  .content-wrapper{
+    width:100%;
+    transform-origin: top left;
+    /* scale will be set dynamically */
   }
-  .drop:hover {
-    border-color: var(--accent);
-    background: #f0f6ff;
-  }
+  /* PDF canvas will be appended here */
+  .pdf-page{ margin-bottom:14px; display:flex; justify-content:center; align-items:center; }
 
-  input[type="file"] {
-    display: none;
-  }
-
-  #output {
-    background: #fff;
-    border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    min-height: 60vh;
-    overflow-x: auto;
-    overflow-y: auto;
-    padding: 14px;
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: auto;
-  }
-  table th,
-  table td {
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    padding: 6px;
-    font-size: clamp(0.8rem, 1.5vw, 0.95rem);
-    text-align: left;
-  }
-  table th {
-    background: #f3f6fb;
-  }
-
-  .searchbar {
-    display: flex;
-    gap: 6px;
-    flex: 1;
-  }
-  .searchbar input {
-    flex: 1;
-    padding: 8px;
-    border-radius: 8px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    font-size: 0.9rem;
-  }
-
-  canvas {
-    display: block;
-    margin: 0 auto 12px;
-    width: 100%;
-    height: auto;
-    background: #fafafa;
-    border-radius: 6px;
-  }
-
-  pre {
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  @media (max-width: 768px) {
-    body {
-      padding: 12px;
-    }
-    .wrap {
-      flex-direction: column;
-    }
-    .panel {
-      width: 100%;
-    }
-    #output {
-      min-height: 50vh;
-    }
-    .toolbar {
-      justify-content: center;
-    }
+  /* excel table styling */
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid rgba(0,0,0,0.08);padding:6px;text-align:left;font-size:14px}
+  th{background:#f3f6fb}
+  /* small helpers */
+  .meta{color:var(--muted);font-size:13px;margin-left:8px}
+  .zoom-ind{min-width:56px;text-align:center}
+  @media(max-width:900px){
+    .search input{min-width:100px}
+    .brand{display:none}
   }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="panel">
-      <div class="toolbar" id="topToolbar">
-        <label class="drop" id="dropZone">Drag or Choose File
-          <input id="fileInput" type="file" accept=".docx, .xlsx, .xls, .csv, .pdf" />
-        </label>
-        <button id="clearBtn">Clear</button>
-        <button id="exportTextBtn">Export Text</button>
-        <button id="exportJsonBtn">Export JSON</button>
-      </div>
-      <h1>Word, Excel & PDF Reader</h1>
-      <p class="lead">Works fully offline — auto fits any device.</p>
+
+  <div class="topbar" role="toolbar" aria-label="Main toolbar">
+    <div class="brand">File Viewer</div>
+
+    <!-- file picker + drag -->
+    <label class="drop-label" id="dropZone">Choose / Drag File
+      <input id="fileInput" type="file" accept=".docx,.xlsx,.xls,.csv,.pdf" />
+    </label>
+
+    <div class="toolbar-actions">
+      <button id="clearBtn" class="btn ghost">Clear</button>
+      <button id="exportTextBtn" class="btn">Export Text</button>
+      <button id="exportJsonBtn" class="btn">Export JSON</button>
+
+      <!-- zoom controls (affect only viewer content) -->
+      <button id="zoomOut" class="btn ghost" title="Zoom out">−</button>
+      <button id="zoomIn" class="btn ghost" title="Zoom in">＋</button>
+      <button id="zoomReset" class="btn ghost" title="Reset zoom">Reset</button>
+      <button id="fitWidth" class="btn ghost" title="Fit to width">Fit</button>
+
+      <div class="zoom-ind meta" id="zoomLabel">100%</div>
     </div>
 
-    <div class="panel">
-      <div class="toolbar">
-        <div id="fileInfo"><em>No file loaded</em></div>
-        <div class="searchbar">
-          <input id="searchInput" placeholder="Search..." />
-          <button id="findBtn">Find</button>
-        </div>
-      </div>
-
-      <div id="output">
-        <p><em>Drop or choose a Word, Excel, or PDF file to start...</em></p>
-      </div>
+    <div class="search" role="search" aria-label="Search in document">
+      <input id="searchInput" placeholder="Search (Ctrl+F for browser highlight)" />
+      <button id="findBtn" class="btn ghost">Find</button>
     </div>
   </div>
 
-  <!-- Libraries -->
+  <div class="viewer-wrap">
+    <main class="viewer" id="viewer" aria-live="polite" tabindex="0">
+      <div id="fileInfo" class="meta">No file loaded</div>
+      <div id="content" class="content-wrapper" style="transform: scale(1);"></div>
+    </main>
+  </div>
+
+  <!-- libraries -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <script>
   (function(){
+    // Elements
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
+    const viewer = document.getElementById('viewer');
+    const content = document.getElementById('content');
     const fileInfo = document.getElementById('fileInfo');
-    const output = document.getElementById('output');
     const clearBtn = document.getElementById('clearBtn');
     const exportTextBtn = document.getElementById('exportTextBtn');
     const exportJsonBtn = document.getElementById('exportJsonBtn');
+    const zoomIn = document.getElementById('zoomIn');
+    const zoomOut = document.getElementById('zoomOut');
+    const zoomReset = document.getElementById('zoomReset');
+    const fitWidth = document.getElementById('fitWidth');
+    const zoomLabel = document.getElementById('zoomLabel');
     const searchInput = document.getElementById('searchInput');
     const findBtn = document.getElementById('findBtn');
-    let current = {type:null, filename:null, text:null, sheets:null, html:null};
 
-    function reset(){
-      current = {type:null, filename:null, text:null, sheets:null, html:null};
-      output.innerHTML = '<p><em>Drop or choose a Word, Excel, or PDF file to start...</em></p>';
-      fileInfo.innerHTML = '<em>No file loaded</em>';
+    // state
+    let current = { type:null, filename:null, text:null, sheets:null, html:null, pdfDoc:null, pdfPages:[] };
+    let zoom = 1;          // content zoom (1 = 100%)
+    const ZOOM_STEP = 0.1;
+    const ZOOM_MIN = 0.2;
+    const ZOOM_MAX = 3;
+
+    // helpers
+    function setZoom(v){
+      zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v));
+      content.style.transform = `scale(${zoom})`;
+      // ensure transform-origin top-left; keep viewer scroll position reasonable
+      // update label
+      zoomLabel.textContent = Math.round(zoom * 100) + '%';
     }
 
+    function updateFileInfo(text){
+      fileInfo.textContent = text;
+    }
+
+    function clearViewer(){
+      // clean pdf resources if any
+      if(current.pdfDoc) {
+        try{ current.pdfDoc.destroy(); }catch(e){}
+      }
+      current = { type:null, filename:null, text:null, sheets:null, html:null, pdfDoc:null, pdfPages:[] };
+      content.innerHTML = '';
+      updateFileInfo('No file loaded');
+      setZoom(1);
+    }
+
+    // Fit to width: compute scale so content width fits viewer inner width (account for padding)
+    function fitToWidth(){
+      // temporarily reset scale to 1 to measure natural width of content
+      const prev = zoom;
+      content.style.transform = 'scale(1)';
+      // use bounding box of content
+      const contentBox = content.getBoundingClientRect();
+      const viewerBox = viewer.getBoundingClientRect();
+      // if no content width, skip
+      if(contentBox.width === 0) { setZoom(prev); return; }
+      const available = viewerBox.width - 28; // padding / margin buffer
+      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, available / contentBox.width));
+      setZoom(newZoom);
+    }
+
+    // File parsing / rendering
     async function handleFile(file){
-      reset();
-      fileInfo.textContent = "Loading " + file.name + "...";
-      const ext = file.name.split('.').pop().toLowerCase();
+      clearViewer();
+      updateFileInfo('Loading ' + file.name + ' ...');
+      current.filename = file.name;
+      const ext = (file.name.split('.').pop()||'').toLowerCase();
       const buf = await file.arrayBuffer();
 
-      if(ext === "docx"){
-        current.type = "docx";
-        current.filename = file.name;
-        const res = await mammoth.convertToHtml({arrayBuffer: buf});
-        current.html = res.value;
-        const textRes = await mammoth.extractRawText({arrayBuffer: buf});
-        current.text = textRes.value;
-        output.innerHTML = "<div>"+current.html+"</div>";
-        fileInfo.textContent = file.name + " (Word)";
-      } 
-      else if(["xlsx","xls","csv"].includes(ext)){
-        current.type = "excel";
-        current.filename = file.name;
-        const wb = XLSX.read(new Uint8Array(buf), {type:"array"});
-        const sheets = wb.SheetNames.map(name=>{
-          return {name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1})};
-        });
-        current.sheets = sheets;
-        current.text = sheets.map(s=>"Sheet: "+s.name+"\n"+s.rows.map(r=>r.join('\t')).join('\n')).join('\n\n');
-        renderExcelSheet(0);
-        fileInfo.textContent = file.name + " (Excel)";
-      } 
-      else if(ext === "pdf"){
-        current.type = "pdf";
-        current.filename = file.name;
-        await renderPDF(buf);
-        fileInfo.textContent = file.name + " (PDF)";
+      try{
+        if(ext === 'docx'){
+          current.type = 'docx';
+          // mammoth -> HTML and text
+          const res = await mammoth.convertToHtml({arrayBuffer:buf});
+          const textRes = await mammoth.extractRawText({arrayBuffer:buf});
+          current.html = res.value;
+          current.text = textRes.value;
+          renderHTML(current.html);
+          updateFileInfo(file.name + ' (Word)');
+        } else if(['xlsx','xls','csv'].includes(ext)){
+          current.type = 'excel';
+          const wb = XLSX.read(new Uint8Array(buf), {type:'array'});
+          const sheets = wb.SheetNames.map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, blankrows:false}) }));
+          current.sheets = sheets;
+          current.text = sheets.map(s => 'Sheet: ' + s.name + '\n' + s.rows.map(r=>r.join('\t')).join('\n')).join('\n\n');
+          renderExcel(0);
+          updateFileInfo(file.name + ' (Excel)');
+        } else if(ext === 'pdf'){
+          current.type = 'pdf';
+          // pdf.js
+          const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+          current.pdfDoc = pdf;
+          await renderPDF(pdf);
+          updateFileInfo(file.name + ' (PDF, ' + pdf.numPages + ' pages)');
+        } else {
+          updateFileInfo('Unsupported file type: ' + ext);
+        }
+      }catch(err){
+        console.error(err);
+        updateFileInfo('Failed to load file: ' + err.message);
       }
-      else {
-        fileInfo.textContent = "Unsupported file type.";
-      }
+      // default fit-to-width for new documents
+      setTimeout(()=>fitToWidth(), 120);
     }
 
-    function renderExcelSheet(i){
-      const s = current.sheets[i];
-      let html = `<h3>${s.name}</h3><div style="overflow-x:auto"><table>`;
-      s.rows.forEach((r, idx)=>{
-        html += "<tr>";
-        r.forEach(c=>{
-          html += idx===0 ? `<th>${c||""}</th>` : `<td>${c||""}</td>`;
-        });
-        html += "</tr>";
+    // Render Word HTML safely inside content container
+    function renderHTML(html){
+      content.innerHTML = '';
+      const container = document.createElement('div');
+      container.className = 'docx-container';
+      // basic reset styles to keep layout predictable
+      container.style.maxWidth = '100%';
+      container.style.boxSizing = 'border-box';
+      container.innerHTML = html;
+      // ensure images are responsive
+      container.querySelectorAll('img').forEach(img=>{
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
       });
-      html += "</table></div>";
-      output.innerHTML = html;
+      content.appendChild(container);
+      current.text = container.innerText || container.textContent || current.text || '';
     }
 
-    async function renderPDF(arrayBuffer){
-      output.innerHTML = "";
-      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-      const numPages = pdf.numPages;
-      let allText = "";
-
-      for(let i = 1; i <= numPages; i++){
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({scale: 1.5});
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        output.appendChild(canvas);
-
-        await page.render({canvasContext: context, viewport}).promise;
-
-        // Extract text
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(" ");
-        allText += pageText + "\n";
+    // Excel: show first sheet, add selector if multiple
+    function renderExcel(sheetIndex){
+      content.innerHTML = '';
+      const sheet = current.sheets[sheetIndex];
+      // header for sheet selector if >1
+      if(current.sheets.length > 1){
+        const sel = document.createElement('div');
+        sel.style.marginBottom = '8px';
+        current.sheets.forEach((s,i)=>{
+          const b = document.createElement('button');
+          b.textContent = s.name;
+          b.className = 'btn ghost';
+          b.style.marginRight = '6px';
+          b.addEventListener('click', ()=> renderExcel(i));
+          sel.appendChild(b);
+        });
+        content.appendChild(sel);
       }
 
-      current.text = allText;
+      const wrapper = document.createElement('div');
+      wrapper.style.overflowX = 'auto';
+      wrapper.style.paddingTop = '6px';
+      const table = document.createElement('table');
+      sheet.rows.forEach((row, rIdx)=>{
+        const tr = document.createElement('tr');
+        row.forEach(cell=>{
+          const cellEl = document.createElement(rIdx===0 ? 'th' : 'td');
+          cellEl.textContent = cell === undefined ? '' : String(cell);
+          tr.appendChild(cellEl);
+        });
+        table.appendChild(tr);
+      });
+      wrapper.appendChild(table);
+      content.appendChild(wrapper);
     }
 
-    // Events
-    fileInput.addEventListener("change", e=>{
-      if(e.target.files[0]) handleFile(e.target.files[0]);
-      e.target.value="";
+    // PDF rendering with re-render on zoom change
+    async function renderPDF(pdf){
+      content.innerHTML = '';
+      current.pdfPages = [];
+      const numPages = pdf.numPages;
+      // render pages sequentially (simple approach)
+      for(let p = 1; p <= numPages; p++){
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({scale: 1}); // base scale 1, we'll control canvas size using devicePixelRatio*zoom
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-canvas';
+        const canvasWrapper = document.createElement('div');
+        canvasWrapper.className = 'pdf-page';
+        canvasWrapper.appendChild(canvas);
+        content.appendChild(canvasWrapper);
+        current.pdfPages.push({page, canvas, viewport});
+      }
+      // first render all pages at current zoom
+      await pdfRenderAll();
+    }
+
+    async function pdfRenderAll(){
+      if(!current.pdfPages || current.pdfPages.length === 0) return;
+      // render each page to its canvas using zoom factor (scale = zoom)
+      for(const pp of current.pdfPages){
+        const { page } = pp;
+        // compute viewport for requested zoom
+        const scale = zoom;
+        const viewport = page.getViewport({scale});
+        const canvas = pp.canvas;
+        const context = canvas.getContext('2d');
+        // set size for crisp rendering (account for devicePixelRatio)
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * ratio);
+        canvas.height = Math.floor(viewport.height * ratio);
+        canvas.style.width = Math.floor(viewport.width) + 'px';
+        canvas.style.height = Math.floor(viewport.height) + 'px';
+        // scale context
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        // render
+        await page.render({canvasContext: context, viewport}).promise;
+      }
+    }
+
+    // Events and controls
+    fileInput.addEventListener('change', e=>{
+      const f = e.target.files && e.target.files[0];
+      if(f) handleFile(f);
+      e.target.value = '';
     });
 
-    ["dragenter","dragover"].forEach(ev=>dropZone.addEventListener(ev,e=>{
-      e.preventDefault(); dropZone.style.borderColor="#2563eb";
-    }));
-    ["dragleave","drop"].forEach(ev=>dropZone.addEventListener(ev,e=>{
-      e.preventDefault(); dropZone.style.borderColor="rgba(34,100,200,0.15)";
-    }));
-    dropZone.addEventListener("drop", e=>{
-      const f=e.dataTransfer.files[0];
+    // drop zone
+    ['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, (e)=>{ e.preventDefault(); dropZone.style.borderColor = '#2563eb'; }));
+    ['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, (e)=>{ e.preventDefault(); dropZone.style.borderColor = ''; }));
+    dropZone.addEventListener('drop', e=>{
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
       if(f) handleFile(f);
     });
 
-    clearBtn.addEventListener("click", reset);
+    clearBtn.addEventListener('click', clearViewer);
 
-    exportTextBtn.addEventListener("click", ()=>{
-      if(!current.text) return alert("No text to export");
-      const blob = new Blob([current.text], {type:"text/plain"});
-      const a = document.createElement("a");
+    exportTextBtn.addEventListener('click', ()=>{
+      if(!current.text) return alert('No extracted text to export.');
+      const blob = new Blob([current.text], {type:'text/plain'});
+      const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = (current.filename || "file") + "-text.txt";
+      a.download = (current.filename ? current.filename.replace(/\.[^.]+$/,'') : 'document') + '-text.txt';
       a.click();
     });
 
-    exportJsonBtn.addEventListener("click", ()=>{
-      if(!current.type) return alert("Nothing to export");
-      const blob = new Blob([JSON.stringify(current, null, 2)], {type:"application/json"});
-      const a = document.createElement("a");
+    exportJsonBtn.addEventListener('click', ()=>{
+      if(!current.type) return alert('Nothing to export');
+      const payload = { type: current.type, filename: current.filename };
+      if(current.type === 'pdf'){
+        payload.text = current.text || '';
+      } else if(current.type === 'docx'){
+        payload.text = current.text || '';
+        payload.html = current.html || '';
+      } else if(current.type === 'excel'){
+        payload.sheets = current.sheets || [];
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+      const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = (current.filename || "file") + "-data.json";
+      a.download = (current.filename ? current.filename.replace(/\.[^.]+$/,'') : 'document') + '-data.json';
       a.click();
     });
 
-    findBtn.addEventListener("click", ()=>{
-      const q = searchInput.value.trim().toLowerCase();
-      if(!q) return alert("Enter text to search");
-      const t = output.innerText.toLowerCase();
-      if(t.includes(q)) alert("Text found — use browser search (Ctrl+F) to highlight.");
-      else alert("Not found.");
+    // Zoom controls: affect content transform or re-render PDFs
+    zoomIn.addEventListener('click', async ()=>{
+      setZoom(zoom + ZOOM_STEP);
+      if(current.type === 'pdf') await pdfRenderAll();
+    });
+    zoomOut.addEventListener('click', async ()=>{
+      setZoom(zoom - ZOOM_STEP);
+      if(current.type === 'pdf') await pdfRenderAll();
+    });
+    zoomReset.addEventListener('click', async ()=>{
+      setZoom(1);
+      if(current.type === 'pdf') await pdfRenderAll();
+    });
+    fitWidth.addEventListener('click', async ()=>{
+      fitToWidth();
+      if(current.type === 'pdf') await pdfRenderAll();
     });
 
-    reset();
+    findBtn.addEventListener('click', ()=>{
+      const q = (searchInput.value||'').trim().toLowerCase();
+      if(!q) return alert('Enter search text');
+      // For Word/Excel/PDF we update current.text if not present; then check occurrence and focus viewer
+      const hay = (current.text || content.innerText || '').toLowerCase();
+      if(!hay) return alert('No text extracted to search.');
+      if(hay.includes(q)){
+        alert('Found — use browser find (Ctrl/⌘+F) to highlight, or scroll to search results (not implemented).');
+        viewer.focus();
+      } else {
+        alert('Not found');
+      }
+    });
+
+    // keyboard: +/- for zoom while viewer focused (optional)
+    viewer.addEventListener('keydown', async (e)=>{
+      if(e.key === '+' || e.key === '=' ){ e.preventDefault(); setZoom(Math.min(ZOOM_MAX, zoom + ZOOM_STEP)); if(current.type === 'pdf') await pdfRenderAll(); }
+      if(e.key === '-') { e.preventDefault(); setZoom(Math.max(ZOOM_MIN, zoom - ZOOM_STEP)); if(current.type === 'pdf') await pdfRenderAll(); }
+      if((e.ctrlKey || e.metaKey) && e.key === '0'){ e.preventDefault(); setZoom(1); if(current.type === 'pdf') await pdfRenderAll(); }
+    });
+
+    // init
+    setZoom(1);
+    clearViewer();
+
+    // Accessibility: focus dropZone via keyboard
+    dropZone.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
   })();
   </script>
 </body>
