@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Word & Excel Reader (Responsive)</title>
+<title>Word, Excel & PDF Reader (Responsive)</title>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -71,12 +71,14 @@
 
   .drop {
     border: 2px dashed rgba(34, 100, 200, 0.15);
-    padding: 18px;
-    text-align: center;
-    border-radius: 10px;
+    border-radius: 8px;
+    padding: 8px 14px;
     cursor: pointer;
     color: var(--muted);
     transition: 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .drop:hover {
     border-color: var(--accent);
@@ -125,6 +127,15 @@
     font-size: 0.9rem;
   }
 
+  canvas {
+    display: block;
+    margin: 0 auto 12px;
+    width: 100%;
+    height: auto;
+    background: #fafafa;
+    border-radius: 6px;
+  }
+
   pre {
     white-space: pre-wrap;
     word-break: break-word;
@@ -152,19 +163,16 @@
 <body>
   <div class="wrap">
     <div class="panel">
-      <div class="toolbar">
+      <div class="toolbar" id="topToolbar">
+        <label class="drop" id="dropZone">Drag or Choose File
+          <input id="fileInput" type="file" accept=".docx, .xlsx, .xls, .csv, .pdf" />
+        </label>
         <button id="clearBtn">Clear</button>
         <button id="exportTextBtn">Export Text</button>
         <button id="exportJsonBtn">Export JSON</button>
       </div>
-      <h1>Word & Excel Reader</h1>
-      <p class="lead">Open local <strong>.docx</strong> or <strong>.xlsx</strong> files — works fully offline.</p>
-
-      <label class="drop" id="dropZone">
-        Drag & drop file here<br />
-        or <button id="pickBtn" style="margin-top:8px;">Choose File</button>
-        <input id="fileInput" type="file" accept=".docx, .xlsx, .xls, .csv" />
-      </label>
+      <h1>Word, Excel & PDF Reader</h1>
+      <p class="lead">Works fully offline — auto fits any device.</p>
     </div>
 
     <div class="panel">
@@ -177,7 +185,7 @@
       </div>
 
       <div id="output">
-        <p><em>Drop a Word or Excel file to start...</em></p>
+        <p><em>Drop or choose a Word, Excel, or PDF file to start...</em></p>
       </div>
     </div>
   </div>
@@ -185,11 +193,11 @@
   <!-- Libraries -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
   <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
   <script>
   (function(){
     const fileInput = document.getElementById('fileInput');
-    const pickBtn = document.getElementById('pickBtn');
     const dropZone = document.getElementById('dropZone');
     const fileInfo = document.getElementById('fileInfo');
     const output = document.getElementById('output');
@@ -202,7 +210,7 @@
 
     function reset(){
       current = {type:null, filename:null, text:null, sheets:null, html:null};
-      output.innerHTML = '<p><em>Drop a Word or Excel file to start...</em></p>';
+      output.innerHTML = '<p><em>Drop or choose a Word, Excel, or PDF file to start...</em></p>';
       fileInfo.innerHTML = '<em>No file loaded</em>';
     }
 
@@ -221,7 +229,8 @@
         current.text = textRes.value;
         output.innerHTML = "<div>"+current.html+"</div>";
         fileInfo.textContent = file.name + " (Word)";
-      } else if(["xlsx","xls","csv"].includes(ext)){
+      } 
+      else if(["xlsx","xls","csv"].includes(ext)){
         current.type = "excel";
         current.filename = file.name;
         const wb = XLSX.read(new Uint8Array(buf), {type:"array"});
@@ -232,7 +241,14 @@
         current.text = sheets.map(s=>"Sheet: "+s.name+"\n"+s.rows.map(r=>r.join('\t')).join('\n')).join('\n\n');
         renderExcelSheet(0);
         fileInfo.textContent = file.name + " (Excel)";
-      } else {
+      } 
+      else if(ext === "pdf"){
+        current.type = "pdf";
+        current.filename = file.name;
+        await renderPDF(buf);
+        fileInfo.textContent = file.name + " (PDF)";
+      }
+      else {
         fileInfo.textContent = "Unsupported file type.";
       }
     }
@@ -251,12 +267,37 @@
       output.innerHTML = html;
     }
 
+    async function renderPDF(arrayBuffer){
+      output.innerHTML = "";
+      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+      const numPages = pdf.numPages;
+      let allText = "";
+
+      for(let i = 1; i <= numPages; i++){
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({scale: 1.5});
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        output.appendChild(canvas);
+
+        await page.render({canvasContext: context, viewport}).promise;
+
+        // Extract text
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(" ");
+        allText += pageText + "\n";
+      }
+
+      current.text = allText;
+    }
+
     // Events
     fileInput.addEventListener("change", e=>{
       if(e.target.files[0]) handleFile(e.target.files[0]);
       e.target.value="";
     });
-    pickBtn.addEventListener("click", ()=> fileInput.click());
 
     ["dragenter","dragover"].forEach(ev=>dropZone.addEventListener(ev,e=>{
       e.preventDefault(); dropZone.style.borderColor="#2563eb";
